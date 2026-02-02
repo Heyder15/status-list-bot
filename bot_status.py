@@ -8,20 +8,14 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ==========================
-#  BURAYA ÖZ TOKENİNİ YAZ
-# ==========================
-BOT_TOKEN = "8507724579:AAFA97ier5MsIL6rFTa_YVEBJCTCiEQeVtU"  # Məs: "1234567890:AA...."
+BOT_TOKEN = "8507724579:AAFA97ier5MsIL6rFTa_YVEBJCTCiEQeVtU"  
 
 
-# ================== KONFİQURASİYA ==================
 
-# Başlanğıcda "Müsait" olan listlər
 DEFAULT_AVAILABLE = {1, 3, 4, 5, 6, 11, 12, 13, 14, 15, 17, 19, 20, 22, 23, 26}
 AVAILABLE_LISTS = set(DEFAULT_AVAILABLE)
 
-# Başlanğıcda "Meşgul" olan listlər və onların müddəti
-# format: liste_no: (gün, saat, dəqiqə, saniyə)
+
 BUSY_CONFIG = {
     2:  (0, 11, 59, 51),
     7:  (40, 14, 17, 51),
@@ -35,9 +29,9 @@ BUSY_CONFIG = {
     25: (0, 2, 44, 51),
 }
 
-# Runtime-da istifadə ediləcək:
-BUSY_LISTS: dict[int, datetime] = {}       # {liste_no: bitmə_vaxtı}
-ACTIVE_STATUS_MSG: dict[int, int] = {}     # {chat_id: message_id}
+
+BUSY_LISTS: dict[int, datetime] = {}      
+ACTIVE_STATUS_MSG: dict[int, int] = {}     
 
 
 def init_busy_lists():
@@ -81,7 +75,7 @@ def build_status_text() -> str:
     global AVAILABLE_LISTS, BUSY_LISTS
     now = datetime.now()
 
-    # Vaxtı bitmiş meşgul listləri Müsait-ə keçir
+   
     finished = []
     for no, end_time in BUSY_LISTS.items():
         if end_time <= now:
@@ -90,7 +84,7 @@ def build_status_text() -> str:
         BUSY_LISTS.pop(no, None)
         AVAILABLE_LISTS.add(no)
 
-    # ---- Müsait hissəsi ----
+   
     text = "╔═════🔹Boş🔹═════╗\n"
     if AVAILABLE_LISTS:
         for no in sorted(AVAILABLE_LISTS):
@@ -99,7 +93,7 @@ def build_status_text() -> str:
         text += "║         (Müsait liste yok)          \n"
     text += "╚═══════════════╝\n\n"
 
-    # ---- Meşgul hissəsi ----
+    
     text += "╔═════🔸Dolu🔸═════╗\n"
     if BUSY_LISTS:
         for no in sorted(BUSY_LISTS.keys()):
@@ -116,7 +110,6 @@ def build_status_text() -> str:
     return text
 
 
-# =============== JOB CALLBACK ==================
 
 
 async def update_status_message(context: ContextTypes.DEFAULT_TYPE):
@@ -128,7 +121,7 @@ async def update_status_message(context: ContextTypes.DEFAULT_TYPE):
 
     text = build_status_text()
 
-    # Əgər artıq Meşgul list qalmayıbsa, son dəfə update edib işi dayandıraq
+    
     if not BUSY_LISTS:
         try:
             await context.bot.edit_message_text(
@@ -152,7 +145,7 @@ async def update_status_message(context: ContextTypes.DEFAULT_TYPE):
             text=text,
         )
     except RetryAfter as e:
-        # Flood-control çıxsa, job-u dayandırırıq, sonra lazım olanda /durum ilə yenidən açarsan
+        
         print(f"Flood on edit: wait {e.retry_after} s – job stopped for chat {chat_id}")
         job.schedule_removal()
         ACTIVE_STATUS_MSG.pop(chat_id, None)
@@ -162,7 +155,7 @@ async def update_status_message(context: ContextTypes.DEFAULT_TYPE):
         ACTIVE_STATUS_MSG.pop(chat_id, None)
 
 
-# =============== KOMANDALAR ==================
+
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -175,16 +168,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
-    # İlk dəfə çağrılırsa BUSY_LISTS-i initialize et
+    
     if not BUSY_LISTS:
         init_busy_lists()
 
     text = build_status_text()
 
-    # Əgər bu chat üçün artıq aktiv status mesajı varsa:
+    
     if chat_id in ACTIVE_STATUS_MSG:
         message_id = ACTIVE_STATUS_MSG[chat_id]
-        # Sadəcə mövcud mesajı yeniləməyə çalışırıq (yenidən spam mesaj göndərmirik)
+       
         try:
             await context.bot.edit_message_text(
                 chat_id=chat_id,
@@ -194,19 +187,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print("Existing message edit in /start failed:", e)
 
-        # Job varsa toxunmuruq, yoxdursa yenidən qoşuruq
+       
         current_jobs = context.application.job_queue.get_jobs_by_name(f"status_{chat_id}")
         if not current_jobs:
             context.application.job_queue.run_repeating(
                 callback=update_status_message,
-                interval=5.0,       # hər 5 saniyədən bir
+                interval=5.0,      
                 first=5.0,
                 name=f"status_{chat_id}",
                 data={"chat_id": chat_id, "message_id": message_id},
             )
         return
 
-    # Yeni status mesajı göndəririk
+   
     try:
         msg = await update.message.reply_text(text)
     except RetryAfter as e:
@@ -218,15 +211,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ACTIVE_STATUS_MSG[chat_id] = msg.message_id
 
-    # Eyni adda köhnə job qalıbsa, silək
+    
     current_jobs = context.application.job_queue.get_jobs_by_name(f"status_{chat_id}")
     for j in current_jobs:
         j.schedule_removal()
 
-    # Hər 5 saniyədən bir statusu yeniləyən job
+   
     context.application.job_queue.run_repeating(
         callback=update_status_message,
-        interval=5.0,          # flood riskini azaltmaq üçün 5 saniyə
+        interval=5.0,         
         first=5.0,
         name=f"status_{chat_id}",
         data={"chat_id": chat_id, "message_id": msg.message_id},
@@ -243,7 +236,7 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     AVAILABLE_LISTS = set(DEFAULT_AVAILABLE)
     init_busy_lists()
 
-    # Bu chat üçün job varsa dayandır
+   
     for j in context.application.job_queue.get_jobs_by_name(f"status_{chat_id}"):
         j.schedule_removal()
     ACTIVE_STATUS_MSG.pop(chat_id, None)
@@ -259,7 +252,7 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Komandalar
+   
     app.add_handler(CommandHandler(["start", "durum", "status"], start))
     app.add_handler(CommandHandler("reset", reset))
 
@@ -269,4 +262,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
